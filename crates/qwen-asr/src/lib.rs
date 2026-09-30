@@ -112,3 +112,33 @@ pub fn optimization_flags() -> Vec<&'static str> {
 
     flags
 }
+
+/// Whether this process's actual CPU has the instruction-set extensions the
+/// x86_64 SIMD kernels in [`kernels::avx`](crate::kernels) require (AVX2 +
+/// FMA). Always `true` on non-x86_64 targets.
+///
+/// This is a genuine *runtime* check ([`std::is_x86_feature_detected`]) and
+/// is independent of [`optimization_flags`], which only reports what the
+/// *compiler* was told to target (`-C target-feature`/`target-cpu`) — not
+/// what the CPU this binary actually executes on supports.
+///
+/// [`kernels::avx`](crate::kernels) is compiled in for every x86_64 build
+/// unconditionally (gated on `target_arch`, not `target_feature`), and its
+/// functions are marked `#[target_feature(enable = "avx2", enable = "fma")]`
+/// — calling one when the CPU lacks those extensions is undefined behavior
+/// and crashes the process with `SIGILL`, with no panic or error message.
+/// [`context::QwenModel::load`](crate::context::QwenModel::load) checks
+/// this before touching any kernel so that gap surfaces as a clear error
+/// instead. Confirmed on an Ivy Bridge-era Xeon (AVX present, AVX2/FMA
+/// absent — that generation gap is narrow but real: AVX2 only shipped
+/// starting with Haswell in 2013, one microarchitecture generation later).
+#[cfg(target_arch = "x86_64")]
+pub fn cpu_meets_kernel_requirements() -> bool {
+    std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma")
+}
+
+/// Always `true` off x86_64 — see the x86_64 overload's doc comment.
+#[cfg(not(target_arch = "x86_64"))]
+pub fn cpu_meets_kernel_requirements() -> bool {
+    true
+}

@@ -39,6 +39,13 @@ impl QwenModel {
     /// The directory must contain `model*.safetensors` and `vocab.json`.
     /// Returns `None` if any required file is missing or malformed.
     pub fn load(model_dir: &str) -> Option<Arc<QwenModel>> {
+        if !crate::cpu_meets_kernel_requirements() {
+            eprintln!("error: this CPU is missing AVX2/FMA, which the x86_64 kernels in this build require.");
+            eprintln!("       There is currently no generic/scalar fallback for this gap -- continuing would crash with SIGILL.");
+            eprintln!("       See crate::cpu_meets_kernel_requirements for details.");
+            return None;
+        }
+
         if kernels::verbose() >= 1 {
             eprintln!("Loading model from {}", model_dir);
         }
