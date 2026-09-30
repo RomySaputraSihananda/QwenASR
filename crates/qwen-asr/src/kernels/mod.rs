@@ -273,8 +273,12 @@ pub fn bf16_to_f32_buf(dst: &mut [f32], src: &[u16]) {
 
     #[cfg(target_arch = "x86_64")]
     {
-        unsafe {
-            avx::bf16_to_f32_buf(dst, src);
+        if crate::cpu_meets_kernel_requirements() {
+            unsafe {
+                avx::bf16_to_f32_buf(dst, src);
+            }
+        } else {
+            generic::bf16_to_f32_buf(dst, src);
         }
     }
 
@@ -339,9 +343,11 @@ fn bf16_matvec_fused(
     }
 
     #[cfg(target_arch = "x86_64")]
-    {
-        unsafe {
+    unsafe {
+        if crate::cpu_meets_kernel_requirements() {
             avx::bf16_matvec_fused(y, x, w_bf16, bias, in_dim, out_dim);
+        } else {
+            generic::bf16_matvec_fused(y, x, w_bf16, bias, in_dim, out_dim);
         }
     }
 
@@ -367,8 +373,12 @@ fn argmax_bf16_range(
     }
 
     #[cfg(target_arch = "x86_64")]
-    {
-        unsafe { avx::argmax_bf16_range(x, w_bf16, in_dim, start, end) }
+    unsafe {
+        if crate::cpu_meets_kernel_requirements() {
+            avx::argmax_bf16_range(x, w_bf16, in_dim, start, end)
+        } else {
+            generic::argmax_bf16_range(x, w_bf16, in_dim, start, end)
+        }
     }
 
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
@@ -404,7 +414,13 @@ pub fn dot_f32(a: &[f32], b: &[f32], n: usize) -> f32 {
         not(all(feature = "vdsp", target_vendor = "apple"))
     ))]
     {
-        unsafe { avx::dot_f32(a, b, n) }
+        unsafe {
+            if crate::cpu_meets_kernel_requirements() {
+                avx::dot_f32(a, b, n)
+            } else {
+                generic::dot_f32(a, b, n)
+            }
+        }
     }
 
     #[cfg(not(any(
@@ -440,7 +456,11 @@ pub fn vec_scale_inplace(dst: &mut [f32], scale: f32, n: usize) {
     ))]
     {
         unsafe {
-            avx::vec_scale_inplace(dst, scale, n);
+            if crate::cpu_meets_kernel_requirements() {
+                avx::vec_scale_inplace(dst, scale, n);
+            } else {
+                generic::vec_scale_inplace(dst, scale, n);
+            }
         }
     }
 
@@ -486,7 +506,11 @@ pub fn vec_axpy_inplace(dst: &mut [f32], src: &[f32], alpha: f32, n: usize) {
     ))]
     {
         unsafe {
-            avx::vec_axpy_inplace(dst, src, alpha, n);
+            if crate::cpu_meets_kernel_requirements() {
+                avx::vec_axpy_inplace(dst, src, alpha, n);
+            } else {
+                generic::vec_axpy_inplace(dst, src, alpha, n);
+            }
         }
     }
 
@@ -508,9 +532,11 @@ pub fn vec_scale_add(dst: &mut [f32], src: &[f32], correction: f32, n: usize) {
     }
 
     #[cfg(target_arch = "x86_64")]
-    {
-        unsafe {
+    unsafe {
+        if crate::cpu_meets_kernel_requirements() {
             avx::vec_scale_add(dst, src, correction, n);
+        } else {
+            generic::vec_scale_add(dst, src, correction, n);
         }
     }
 
@@ -1795,7 +1821,11 @@ unsafe fn matvec_int8_simd(
     #[cfg(target_arch = "aarch64")]
     neon::matvec_int8(y, x_int8, x_scale, w_int8, w_scales, bias, in_dim, out_dim);
     #[cfg(target_arch = "x86_64")]
-    avx::matvec_int8(y, x_int8, x_scale, w_int8, w_scales, bias, in_dim, out_dim);
+    if crate::cpu_meets_kernel_requirements() {
+        avx::matvec_int8(y, x_int8, x_scale, w_int8, w_scales, bias, in_dim, out_dim);
+    } else {
+        generic::matvec_int8(y, x_int8, x_scale, w_int8, w_scales, bias, in_dim, out_dim);
+    }
 }
 
 /// Arch-dispatched single-range INT8 argmax core (see `neon::argmax_int8_range`
@@ -1815,7 +1845,11 @@ pub(crate) unsafe fn int8_argmax_range(
     #[cfg(target_arch = "aarch64")]
     return neon::argmax_int8_range(x_int8, x_scale, w_int8, w_scales, in_dim, start, end);
     #[cfg(target_arch = "x86_64")]
-    return avx::argmax_int8_range(x_int8, x_scale, w_int8, w_scales, in_dim, start, end);
+    return if crate::cpu_meets_kernel_requirements() {
+        avx::argmax_int8_range(x_int8, x_scale, w_int8, w_scales, in_dim, start, end)
+    } else {
+        generic::argmax_int8_range(x_int8, x_scale, w_int8, w_scales, in_dim, start, end)
+    };
 }
 
 /// Compute output rows `[start, end)` of an INT8 matvec (`y = W @ x`, optional
@@ -2064,17 +2098,31 @@ pub(crate) unsafe fn int8_matvec_range_batched(
         n,
     );
     #[cfg(target_arch = "x86_64")]
-    avx::matvec_int8_batched(
-        b,
-        &y_off[..b],
-        &x_int8[..b],
-        &x_scale[..b],
-        w_local,
-        w_scales_local,
-        bias_arg,
-        in_dim,
-        n,
-    );
+    if crate::cpu_meets_kernel_requirements() {
+        avx::matvec_int8_batched(
+            b,
+            &y_off[..b],
+            &x_int8[..b],
+            &x_scale[..b],
+            w_local,
+            w_scales_local,
+            bias_arg,
+            in_dim,
+            n,
+        );
+    } else {
+        generic::matvec_int8_batched(
+            b,
+            &y_off[..b],
+            &x_int8[..b],
+            &x_scale[..b],
+            w_local,
+            w_scales_local,
+            bias_arg,
+            in_dim,
+            n,
+        );
+    }
 }
 
 /// Batched analogue of [`int8_qkv_range`]: the `[start, end)` slice over the
@@ -2171,16 +2219,29 @@ pub(crate) unsafe fn int8_swiglu_range_batched(
         n_rows,
     );
     #[cfg(target_arch = "x86_64")]
-    avx::swiglu_int8_batched(
-        b,
-        &ffn_off[..b],
-        &x_int8[..b],
-        &x_scale[..b],
-        w_local,
-        w_scales_local,
-        in_dim,
-        n_rows,
-    );
+    if crate::cpu_meets_kernel_requirements() {
+        avx::swiglu_int8_batched(
+            b,
+            &ffn_off[..b],
+            &x_int8[..b],
+            &x_scale[..b],
+            w_local,
+            w_scales_local,
+            in_dim,
+            n_rows,
+        );
+    } else {
+        generic::swiglu_int8_batched(
+            b,
+            &ffn_off[..b],
+            &x_int8[..b],
+            &x_scale[..b],
+            w_local,
+            w_scales_local,
+            in_dim,
+            n_rows,
+        );
+    }
 }
 
 // ========================================================================
@@ -2467,7 +2528,11 @@ pub fn layer_norm(
         #[cfg(target_arch = "x86_64")]
         {
             unsafe {
-                avx::layer_norm_row(out_row, x_row, weight, bias, hidden, eps);
+                if crate::cpu_meets_kernel_requirements() {
+                    avx::layer_norm_row(out_row, x_row, weight, bias, hidden, eps);
+                } else {
+                    generic::layer_norm_row(out_row, x_row, weight, bias, hidden, eps);
+                }
             }
             continue;
         }
@@ -2518,7 +2583,11 @@ pub fn rms_norm(
         #[cfg(target_arch = "x86_64")]
         {
             unsafe {
-                avx::rms_norm_row(out_row, x_row, weight, hidden, eps);
+                if crate::cpu_meets_kernel_requirements() {
+                    avx::rms_norm_row(out_row, x_row, weight, hidden, eps);
+                } else {
+                    generic::rms_norm_row(out_row, x_row, weight, hidden, eps);
+                }
             }
             continue;
         }
@@ -2604,7 +2673,11 @@ pub fn gelu(x: &mut [f32], n: usize) {
             }
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                avx::gelu_inplace(x_local, end - start);
+                if crate::cpu_meets_kernel_requirements() {
+                    avx::gelu_inplace(x_local, end - start);
+                } else {
+                    generic::gelu_inplace(x_local, end - start);
+                }
             }
             #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
             for i in 0..(end - start) {
@@ -2626,7 +2699,11 @@ pub fn gelu(x: &mut [f32], n: usize) {
     #[cfg(target_arch = "x86_64")]
     {
         unsafe {
-            avx::gelu_inplace(x, n);
+            if crate::cpu_meets_kernel_requirements() {
+                avx::gelu_inplace(x, n);
+            } else {
+                generic::gelu_inplace(x, n);
+            }
         }
     }
 
@@ -2706,7 +2783,11 @@ pub fn softmax(x: &mut [f32], rows: usize, cols: usize) {
             #[cfg(target_arch = "x86_64")]
             {
                 unsafe {
-                    avx::exp_inplace(row);
+                    if crate::cpu_meets_kernel_requirements() {
+                        avx::exp_inplace(row);
+                    } else {
+                        generic::exp_inplace(row);
+                    }
                 }
             }
 
@@ -3430,7 +3511,11 @@ pub unsafe fn quantize_bf16_weights_to_int8(
     }
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        avx::quantize_bf16_to_int8(w_bf16, out_dim, in_dim)
+        if crate::cpu_meets_kernel_requirements() {
+            avx::quantize_bf16_to_int8(w_bf16, out_dim, in_dim)
+        } else {
+            generic::quantize_bf16_to_int8(w_bf16, out_dim, in_dim)
+        }
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -3582,9 +3667,15 @@ unsafe fn argmax_int8_batched_simd(
         b, best, best_val, x_int8, x_scale, w_int8, w_scales, in_dim, start, end,
     );
     #[cfg(target_arch = "x86_64")]
-    avx::argmax_int8_batched(
-        b, best, best_val, x_int8, x_scale, w_int8, w_scales, in_dim, start, end,
-    );
+    if crate::cpu_meets_kernel_requirements() {
+        avx::argmax_int8_batched(
+            b, best, best_val, x_int8, x_scale, w_int8, w_scales, in_dim, start, end,
+        );
+    } else {
+        generic::argmax_int8_batched(
+            b, best, best_val, x_int8, x_scale, w_int8, w_scales, in_dim, start, end,
+        );
+    }
 }
 
 /// Batched INT8 lm_head argmax (R12-E2): stream the (~155 MB) lm_head weights
